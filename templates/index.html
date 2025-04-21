@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <title>Share Market Advisor Lite</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .chart-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+        }
+
+        .chart-container {
+            position: relative;
+            background-color: #ffffff;
+            width: 45vw;
+            height: 35vh;
+            border: solid 1px green;
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+
+<body style="font-family: sans-serif; background-color: #005; color: #fff;">
+    {% if alert %}
+    <script>alert("Market is Bearish. Invest with Caution!");</script>
+    {% endif %}
+    <h2 style="text-align: center; margin-top: 15px;">Share Market Advisor Lite</h2>
+
+    <div class="chart-grid">
+        <div>
+            <h4>Nifty 50 Trend (Past 365 Days) - <i style="color: #AAF;">{{ state }}</i></h4>
+            <div class="chart-container">
+                <canvas id="niftyChart"></canvas>
+            </div>
+        </div>
+
+        <div>
+            <h4>Expected Portfolio Return: <i style="color: #AAF;">{{ expected_return }}%</i></h4>
+            <div class="chart-container">
+                <canvas id="portfolioChart"></canvas>
+            </div>
+        </div>
+
+        <div>
+            <h4>FII/FPI Investments (Past 90 Days)</h4>
+            <div class="chart-container">
+                <canvas id="fiiChart"></canvas>
+            </div>
+        </div>
+
+        <div>
+            <h4>Top 5 Sectors by Growth (Past 365 Days)</h4>
+            <div class="chart-container">
+                <canvas id="sectorChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        async function fetchData() {
+            const response = await fetch('/data');
+            const data = await response.json();
+            return data;
+        }
+
+        async function renderChart() {
+            const data = await fetchData();
+            const ctx = document.getElementById('niftyChart').getContext('2d');
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Nifty 50 Closing Price',
+                        data: data.prices,
+                        borderColor: 'black',
+                        borderWidth: 1,
+                        fill: true,
+                        backgroundColor: '{{color}}',
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { title: { display: true, text: 'Date' }, grid: { display: false } },
+                        y: { title: { display: true, text: 'Closing Price' }, grid: { display: false } }
+                    },
+                    elements: { line: { tension: 0.2, borderWidth: 3 } }
+                }
+            });
+        }
+
+        fetch('./static/chart_data.json')
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById('portfolioChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: data,
+                    options: {
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'right',
+                                labels: {
+                                    usePointStyle: true,
+                                    boxWidth: 10,
+                                    padding: 10,
+                                    font: {
+                                        size: 11 // Increase font size for better visibility
+                                    },
+                                    generateLabels: function (chart) {
+                                        const data = chart.data;
+                                        if (data.labels.length && data.datasets.length) {
+                                            return data.labels.map((label, i) => {
+                                                const value = data.datasets[0].data[i]+'%';
+                                                return {
+                                                    text: `${label} (${value})`,
+                                                    fillStyle: data.datasets[0].backgroundColor[i],
+                                                    hidden: !chart.getDataVisibility(i),
+                                                    index: i,
+                                                    fontColor: '#777'
+                                                };
+                                            });
+                                        }
+                                        return [];
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (tooltipItem) {
+                                        let label = data.labels[tooltipItem.dataIndex] || '';
+                                        let value = data.datasets[0].data[tooltipItem.dataIndex] || 0;
+                                        return `${label}: ${value}%`;
+                                    }
+                                }
+                            }
+                        },
+                        cutout: '60%', // Adjust the cutout size to make it bigger
+                        layout: {
+                            padding: {
+                                right: 10,
+                                top: 10,
+                                bottom: 10
+                            }
+                        },
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            });
+
+
+
+        async function fetchFIIData() {
+            const response = await fetch('/static/fii_data.csv');
+            const data = await response.text();
+
+            const rows = data.split("\n").slice(1);
+            let dates = [];
+            let investments = [];
+
+            rows.forEach(row => {
+                const [date, investment] = row.split(",");
+                if (date && investment) {
+                    dates.push(date.trim());
+                    investments.push(parseFloat(investment.trim()));
+                }
+            });
+
+            return { dates, investments };
+        }
+
+        async function renderFIIChart() {
+            const data = await fetchFIIData();
+            const ctx = document.getElementById('fiiChart').getContext('2d');
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.dates,
+                    datasets: [{
+                        label: 'FII/FPI Investments',
+                        data: data.investments,
+                        backgroundColor: data.investments.map(value => value >= 0 ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 0, 0, 0.5)'),
+                        borderColor: 'black',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { title: { display: true, text: 'Date' }, grid: { display: false } },
+                        y: { title: { display: true, text: 'Investment (₹ crores)' }, grid: { display: true } }
+                    }
+                }
+            });
+        }
+
+        fetch('./static/sector_growth.json')
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById('sectorChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: data,
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        scales: {
+                            x: { title: { display: true, text: 'Growth (%)' }, grid: { display: true } },
+                            y: { title: { display: true, text: 'Sector' }, grid: { display: false } }
+                        }
+                    }
+                });
+            });
+
+        renderFIIChart();
+        renderChart();
+    </script>
+</body>
+
+</html>
