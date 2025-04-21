@@ -194,4 +194,4 @@ def data():
     return jsonify(data_points)
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=9159, debug=False, use_reloader=False)
+    app.run(host="0.0.0.0", port=3159, debug=False, use_reloader=False)
